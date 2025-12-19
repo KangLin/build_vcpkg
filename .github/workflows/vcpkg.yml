@@ -1,0 +1,92 @@
+# Author: Kang Lin <kl222@126.com>
+
+name: vcpkg
+
+on:
+  push:
+  pull_request:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build_macos:
+    strategy:
+      matrix:
+        os: [ macos-15-intel]
+
+    # See: [About GitHub-hosted runners](https://docs.github.com/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners)
+    # See: [Choosing the runner for a job](https://docs.github.com/actions/writing-workflows/choosing-where-your-workflow-runs/choosing-the-runner-for-a-job)
+    # See: https://github.com/actions/runner-images/
+    runs-on: ${{matrix.os}}
+
+    env:
+      BUILD_DIR:   ${{github.workspace}}/build
+      SOURCE_DIR:  ${{github.workspace}}/.cache/source
+      TOOLS_DIR:   ${{github.workspace}}/.cache/tools
+      INSTALL_DIR: ${{github.workspace}}/.cache/install_${{matrix.os}}
+      qt_modules: "qtscxml qtmultimedia qtserialport qt5compat qtwebsockets qtpositioning qtwebchannel qtwebengine"
+      VCPKGGITCOMMITID: a20d95d3c76906363896754eb1cc93db2a694f16
+      # vcpkg 支持的环境变量
+      VCPKG_ROOT: "${{github.workspace}}/.cache/source/vcpkg"
+      VCPKG_INSTALLATION_ROOT: "${{github.workspace}}/.cache/install_${{matrix.os}}/vcpkg"
+      VCPKG_BUILDTREES_ROOT: "${{github.workspace}}/build/vcpkg/build"
+      VCPKG_PACKAGES_ROOT: "${{github.workspace}}/build/vcpkg/packages"
+      VCPKG_DOWNLOADS: "${{github.workspace}}/build/vcpkg/downloads"
+      #VCPKG_FEATURE_FLAGS: "manifests,versions"
+
+    # Map the job outputs to step outputs
+    outputs:
+      name: ${{ env.artifact_name }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+          fetch-depth: 0
+    
+      - name: Make directories
+        run: |
+          cmake -E make_directory ${{env.BUILD_DIR}}
+          cmake -E make_directory ${{env.SOURCE_DIR}}
+          cmake -E make_directory ${{env.TOOLS_DIR}}
+          cmake -E make_directory ${{env.INSTALL_DIR}}
+          cmake -E make_directory ${{env.VCPKG_INSTALLATION_ROOT}}
+          cmake -E make_directory ${{env.VCPKG_BUILDTREES_ROOT}}
+          cmake -E make_directory ${{env.VCPKG_PACKAGES_ROOT}}
+          cmake -E make_directory ${{env.VCPKG_DOWNLOADS}}
+
+      - name: Cache installed
+        uses: actions/cache@v4
+        id: cache-installed
+        with:
+          path: |
+            ${{env.INSTALL_DIR}}
+            ${{env.VCPKG_ROOT}}
+          key: install_macos_${{env.VCPKG_TARGET_TRIPLET}}
+
+      - name: Git source code
+        working-directory: ${{env.TOOLS_DIR}}
+        shell: bash
+        run: |
+          if [ ! -d vcpkg ]; then
+            git clone --depth=1 https://github.com/microsoft/vcpkg.git
+          fi
+
+      - name: install nasm
+        if: ${{matrix.os == 'macos-15-intel'}}
+        run: |
+          # See: https://formulae.brew.sh/
+          brew update -y
+          brew install nasm autoconf automake libtool pkg-config
+
+      - name: vcpkg
+        if: ${{matrix.os == 'macos-15-intel'}}
+        working-directory: ${{env.TOOLS_DIR}}
+        run: |
+          cd vcpkg
+          if [ ! -f vcpkg ]; then
+            ./bootstrap-vcpkg.sh
+          fi
+          ./vcpkg install qtbase qt5compat qtmultimedia qtscxml qtserialport qtwebsockets qtwebengine qttranslations qtkeychain qttools
