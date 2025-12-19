@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: install nasm
-        if: ${{matrix.os == 'macos-15-intel'}}
+        if: false # ${{matrix.os == 'macos-15-intel'}}
         run: |
           # See: https://formulae.brew.sh/
           brew update -y
